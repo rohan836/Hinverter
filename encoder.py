@@ -1,7 +1,15 @@
-"""HW-040 rotary encoder: rotation via IRQ, button polling for short/long.
+"""HW-040 rotary encoder, tuned for cheap clones with bouncy contacts.
 
-Wiring: CLK -> GP14, DT -> GP15, SW -> GP16 (all to Pico GND/3.3V side:
-the HW-040 board carries its own pull-ups; SW is active-low).
+Rotation: full-quadrature state-table decoder. Both CLK and DT are monitored
+on every edge; only the four valid Gray-code transitions of a 00 -> 01 -> 11
+-> 10 (or the reverse) sequence produce counts, and a full sequence is one
+detent. Bounce produces invalid transitions, which are silently discarded, so
+tiny knob movements can never generate random +/- steps.
+
+Button: polled with a 30 ms debounce; short press (< LONG_PRESS_MS) -> 'short',
+longer hold -> 'long' (fired once when the threshold is crossed).
+
+Wiring: CLK -> GP16, DT -> GP17, SW -> GP18 (3.3 V module logic).
 """
 
 import time
@@ -9,8 +17,14 @@ from machine import Pin
 
 import config
 
-DEBOUNCE_US = 2000
 LONG_PRESS_MS = 1500
+SW_DEBOUNCE_MS = 30
+
+# transition table indexed by (prev << 2) | current: +1 CW, -1 CCW, 0 invalid
+_TABLE = [0] * 16
+for _p, _c, _d in ((0b00, 0b01, 1), (0b01, 0b11, 1), (0b11, 0b10, 1), (0b10, 0b00, 1),
+                   (0b00, 0b10, -1), (0b10, 0b11, -1), (0b11, 0b01, -1), (0b01, 0b00, -1)):
+    _TABLE[(_p << 2) | _c] = _d
 
 
 class Encoder:
@@ -18,45 +32,70 @@ class Encoder:
         self._clk = Pin(config.ENC_CLK, Pin.IN, Pin.PULL_UP)
         self._dt = Pin(config.ENC_DT, Pin.IN, Pin.PULL_UP)
         self._sw = Pin(config.ENC_SW, Pin.IN, Pin.PULL_UP)
-        self._delta = 0
-        self._last_irq = 0
+
+        # ---- rotation state ----
+        self._prev = (self._clk.value() << 1) | self._dt.value()
+        self._accr = 0
+        self._detents = 0
+
+        # ---- button state ----
+        self._sw_state = self._sw.value()
+        self._sw_last_change = 0
         self._press_start = None
         self._long_fired = False
-        self._sw.irq(trigger=Pin.IRQ_FALLING, handler=self._sw_down)
-        # Rotation IRQ: enabled immediately; debounce inside the handler.
-        self._clk.irq(trigger=Pin.IRQ_FALLING, handler=self._clk_changed)
 
-    # ---- rotation (hard IRQ: keep it minimal) ----
-    def _clk_changed(self, pin):
-        now = time.ticks_us()
-        if time.ticks_diff(now, self._last_irq) < DEBOUNCE_US:
-            return
-        self._last_irq = now
-        # DT level at the CLK falling edge tells direction
-        self._delta += 1 if self._dt.value() else -1
+        self._clk.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,
+                      handler=self._edge)
+        self._dt.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,
+                     handler=self._edge)
 
-    # ---- button (IRQ on press start; duration judged in poll()) ----
-    def _sw_down(self, pin):
-        self._press_start = time.ticks_ms()
-        self._long_fired = False
+    # ---- rotation (hard IRQ: integer math + one list lookup only) ----
+
+    def _edge(self, pin):
+        new = (self._clk.value() << 1) | self._dt.value()
+        delta = _TABLE[(self._prev << 2) | new]
+        self._prev = new
+        if delta:
+            self._accr += delta
+            if self._accr >= 4:
+                self._accr -= 4
+                self._detents += 1
+            elif self._accr <= -4:
+                self._accr += 4
+                self._detents -= 1
+
+    # ---- main-loop polling ----
 
     def poll(self):
-        """Call every main-loop iteration. Returns one of
-        ('rotate', steps) | ('short',) | ('long',) | None."""
-        delta = self._delta
-        if delta:
-            self._delta = 0
-            return ("rotate", delta)
+        """Returns one of ('rotate', steps) | ('short',) | ('long',) | None.
 
-        if self._press_start is not None:
-            held_ms = time.ticks_diff(time.ticks_ms(), self._press_start)
-            if held_ms >= LONG_PRESS_MS and not self._long_fired:
+        At most one event per call; call this often (the main loop polls at
+        ~500 Hz). Rotation events win over pending button events.
+        """
+        if self._detents:
+            d = self._detents
+            self._detents = 0
+            if d:
+                return ("rotate", d)
+
+        now = time.ticks_ms()
+        sw = self._sw.value()
+        if sw != self._sw_state:
+            if time.ticks_diff(now, self._sw_last_change) > SW_DEBOUNCE_MS:
+                self._sw_last_change = now
+                if sw == 0:                       # pressed (active-low)
+                    self._press_start = now
+                    self._long_fired = False
+                elif self._press_start is not None:  # released
+                    if not self._long_fired:
+                        self._press_start = None
+                        self._sw_state = sw
+                        return ("short",)
+                    self._press_start = None
+                self._sw_state = sw
+
+        if self._press_start is not None and not self._long_fired:
+            if time.ticks_diff(now, self._press_start) >= LONG_PRESS_MS:
                 self._long_fired = True
                 return ("long",)
-            if self._sw.value() == 1:  # released
-                start, self._press_start = self._press_start, None
-                if not self._long_fired:
-                    return ("short",)
-                self._long_fired = False
-                return None
         return None
