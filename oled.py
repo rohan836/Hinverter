@@ -16,14 +16,14 @@ _PAGES = const(8)
 _COLS = const(128)
 _ROWS = const(64)
 
-# SH1106 init sequence
-_INIT = (
+# SH1106 init sequence (page addressing is implicit; column offset = 2)
+_INIT_SH1106 = (
     0xAE,        # display off
     0xD5, 0x50,  # clock divide / osc frequency
     0xA8, 0x3F,  # multiplex ratio = 64
     0xD3, 0x00,  # display offset = 0
     0x40,        # start line = 0
-    0xAD, 0x8B,  # charge pump (SH1106: enable internal VCC, contrast cmd)
+    0xAD, 0x8B,  # charge pump (internal DC-DC enable)
     0xA1,        # segment remap (column 127 -> SEG0)
     0xC8,        # COM scan direction remapped
     0xDA, 0x12,  # COM pins config
@@ -35,11 +35,47 @@ _INIT = (
     0xAF,        # display on
 )
 
+# SSD1306 init sequence (page addressing mode, charge pump 0x8D)
+_INIT_SSD1306 = (
+    0xAE,        # display off
+    0xD5, 0x80,  # clock divide / osc frequency
+    0xA8, 0x3F,  # multiplex ratio = 64
+    0xD3, 0x00,  # display offset = 0
+    0x40,        # start line = 0
+    0x8D, 0x14,  # charge pump: enable internal DC-DC (REQUIRED - else blank)
+    0x20, 0x00,  # memory mode: horizontal... page addressing
+    0xA1,        # segment remap
+    0xC8,        # COM scan direction remapped
+    0xDA, 0x12,  # COM pins config
+    0x81, 0xCF,  # contrast
+    0xD9, 0xF1,  # pre-charge period
+    0xDB, 0x40,  # VCOM deselect level
+    0xA4,        # follow RAM content
+    0xA6,        # normal display
+    0xAF,        # display on
+)
+
 
 class SH1106:
-    def __init__(self, i2c, oled_addr=config.OLED_ADDR):
+    """Monochrome 128x64 OLED driver.
+
+    Despite the class name (kept for backwards compatibility with existing
+    call sites), the panel controller is selectable via the ``driver``
+    argument / config.OLED_DRIVER: "SH1106" or "SSD1306". The user's 1.3"
+    module identifies itself as SSD1306-compatible (SSD1306 init sequence
+    lights every pixel; the SH1106 one leaves it dark).
+    """
+
+    def __init__(self, i2c, oled_addr=config.OLED_ADDR, driver=None):
         self._i2c = i2c
         self._addr = oled_addr
+        self._driver = (driver or getattr(config, "OLED_DRIVER", "SH1106")).upper()
+        if self._driver == "SSD1306":
+            self._init_seq = _INIT_SSD1306
+            self._col_offset = 0x00
+        else:
+            self._init_seq = _INIT_SH1106
+            self._col_offset = 0x02
         self._buf = bytearray(_COLS * _ROWS // 8)
         self.fb = framebuf.FrameBuffer(self._buf, _COLS, _ROWS,
                                        framebuf.MONO_VLSB)
@@ -51,7 +87,7 @@ class SH1106:
         self._i2c.writeto(self._addr, bytes((0x00, cmd)))  # Co=0, D/C#=0
 
     def _init_display(self):
-        for b in _INIT:
+        for b in self._init_seq:
             self._cmd(b)
         time.sleep_ms(10)
         self.fill(0)
@@ -137,11 +173,11 @@ class SH1106:
 
     def show(self):
         for page in range(_PAGES):
-            self._cmd(0xB0 + page)   # page address
-            self._cmd(0x02)          # low nibble of column 0 (SH1106 offset 2)
-            self._cmd(0x10)          # high nibble
-            chunk = memoryview(self._buf)[page * _COLS:(page + 1) * _COLS]
-            self._i2c.writeto(self._addr, b"\x40" + chunk)
+            self._cmd(0xB0 + page)        # page address
+            self._cmd(0x00 + self._col_offset)   # low nibble of start column
+            self._cmd(0x10)               # high nibble
+            chunk = self._buf[page * _COLS:(page + 1) * _COLS]
+            self._i2c.writeto(self._addr, b"\x40" + bytes(chunk))
 
     def clear(self):
         self.fill(0)

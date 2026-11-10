@@ -11,7 +11,7 @@ Pico (RP2040)  ──SPWM+dead-time──▶  PC123 optocouplers ──▶  BD13
       │                                              8× IRF540 MOSFETs ──▶ 12→230 V
       │                                                      │        transformer
       ▼                                                      ▼
-  SH1106 OLED              ACS712 #1 (output)  ACS712 #2 (battery)   MLX90614
+  SSD1306-mode OLED    ACS712 #1 (output)  ACS712 #2 (battery)   MLX90614
 ```
 
 > **Status: UNVERIFIED ON HARDWARE.** This firmware has been written and
@@ -28,9 +28,12 @@ Pico (RP2040)  ──SPWM+dead-time──▶  PC123 optocouplers ──▶  BD13
   state machine with hardware-enforced 1.5 µs dead-time** between the
   high-side and low-side MOSFETs of each H-bridge leg (no hardware-PWM
   "complementary output" shoot-through).
-- **1.3" SH1106 128×64 OLED** (I2C): Bruce-firmware-style UI — bordered screens,
+- **1.3" 128×64 OLED** (I2C, SSD1306-compatible mode): Bruce-firmware-style UI — bordered screens,
   status bar with battery icon, launcher home pages (Inverter / Battery /
   Thermal), inverted selected rows, blinking fault latch screen, boot splash.
+  Verified on the included unit: it answers to the SSD1306 init sequence
+  (0x8D charge pump + 0x20 page mode); the SH1106 sequence leaves it dark.
+  `config.OLED_DRIVER` selects the controller; the driver supports both.
 - **Encoder UI** (HW-040): rotate = scroll/select, short press = select/edit,
   long press (≥1.5 s) = RUN/STOP toggle / exit-edit.
 - **Feedback + protection**, latched until acknowledge:
@@ -50,7 +53,7 @@ Pico (RP2040)  ──SPWM+dead-time──▶  PC123 optocouplers ──▶  BD13
 | 4 | PC123 optocouplers | gate-driver isolation |
 | 4 | BD139 + 4× BD140 | totem-pole gate drivers (2× paralleled IRF540 per switch) |
 | 8 | IRF540 | H-bridge MOSFETs, 2 paralleled per switch |
-| 1 | 1.3" OLED, SH1106, 128×64, I2C (0x3C) | display |
+| 1 | 1.3" OLED, 128×64, I2C (0x3C) — SSD1306-compatible (verified on this unit) | display |
 | 2 | ACS712-20A modules | output current + battery current |
 | 1 | MLX90614 | IR temperature sensor (heatsink) |
 | 1 | HW-040 rotary encoder | UI |
@@ -63,7 +66,7 @@ Pico (RP2040)  ──SPWM+dead-time──▶  PC123 optocouplers ──▶  BD13
 
 | Function | Pico pin | Notes |
 |---|---|---|
-| I2C0 SDA — SH1106 + MLX90614 | GP4 | 400 kHz, **3.3 V pull-ups only** |
+| I2C0 SDA — OLED + MLX90614 | GP4 | 400 kHz, **3.3 V pull-ups only** |
 | I2C0 SCL | GP5 | |
 | ADC0 — ACS712 #1 (output current) | GP26 | bidirectional, mains-capable |
 | ADC1 — ACS712 #2 (battery current) | GP27 | DC |
@@ -126,7 +129,7 @@ The four gate pins are consumed by the PIO via `set_base`; do not reassign GP10�
 ## Operation
 
 The UI is a **Bruce-firmware-style** design adapted to a monochrome 128×64
-SH1106: 1-px rounded-rectangle border on every screen, a top status bar
+OLED (SSD1306 mode): 1-px rounded-rectangle border on every screen, a top status bar
 (`HINV` left, battery icon + volts right), black background with inverted
 (white-bar/black-text) accents standing in for Bruce's RGB565 colors.
 Monochrome OLED has no color/grayscale, so "accents" are inverted pixels.
@@ -213,8 +216,8 @@ inv_math.py     pure math (sine LUT, duty split, RMS, clamp) - PC-testable
 spwm.py         PIO program: SPWM + dead-time, bridge driver, freewheel
 sensors.py      ACS712 / MLX90614 / battery divider drivers
 protect.py      protection logic, fault latch
-screens.py      SH1106 screens + encoder UI state machine
-oled.py         SH1106 driver
+screens.py      screens + encoder UI state machine
+oled.py         128×64 OLED driver (SH1106 / SSD1306 init via config.OLED_DRIVER)
 encoder.py      HW-040 driver (rotation IRQ + short/long press)
 settings.py     settings.json load/save/validation
 settings.json   defaults (committed, safe values)

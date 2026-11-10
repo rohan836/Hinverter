@@ -1,6 +1,7 @@
 """OLED screens and encoder-driven UI state machine.
 
-Visual style: "Bruce firmware" adapted to a 128x64 monochrome SH1106.
+Visual style: "Bruce firmware" adapted to a 128x64 monochrome OLED
+  (SSD1306 mode; driver selectable via config.OLED_DRIVER).
   * 1-px rounded-rectangle border on every screen
   * top status bar: firmware id left, battery icon + volts right
   * home pages are Bruce "launcher" style: big pixel icon, < > chevrons,

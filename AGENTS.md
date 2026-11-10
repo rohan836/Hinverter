@@ -30,7 +30,7 @@ tested, or mains-ready. Hardware commissioning order is in README.md.
   or the watchdog.
 - **`pull noblock` keeps stale OSR**: duties are pushed at 5 kHz while the
   20 kHz carrier free-runs; Python must not push per carrier cycle.
-- **I2C at 400 kHz is shared**: SH1106 @ 0x3C + MLX90614 @ 0x5A (I2C0,
+- **I2C at 400 kHz is shared**: OLED @ 0x3C + MLX90614 @ 0x5A (I2C0,
   GP4/GP5). Never do I2C inside the SPWM timer IRQ — `spwm.tick()` is
   integer/float math + MMIO only.
 - **ACS712 at 5 V saturates the 3.3 V ADC** above ~8 A — keep both modules
@@ -48,7 +48,11 @@ tested, or mains-ready. Hardware commissioning order is in README.md.
 - **Encoder long-press is overloaded** by user request (RUN/STOP on home;
   cancel/exit elsewhere); voltage editing lives on the Settings screen, not
   home. Don't "fix" this without asking.
-- SH1106 (not SSD1306) is the 1.3" OLED; SH1106 column window starts at 2.
+- **The 1.3" panel is SSD1306-compatible, NOT SH1106** (verified on this
+  unit: SSD1306 init — 0x8D 0x14 charge pump + 0x20 0x00 page mode — lights
+  every pixel; the SH1106 sequence leaves it dark). `config.OLED_DRIVER =
+  "SSD1306"`. `oled.py` supports both; column offset depends on driver
+  (SSD1306 = 0, SH1106 = 2). Do not "fix" the init back to SH1106.
 
 ## Conventions
 - Flat module layout at repo root; files flash directly to the Pico.

@@ -4,7 +4,8 @@
 I2C_SDA = 4
 I2C_SCL = 5
 I2C_FREQ = 400_000
-OLED_ADDR = 0x3C      # SH1106 1.3" 128x64
+OLED_ADDR = 0x3C      # 1.3" 128x64 module (responds to SSD1306 commands)
+OLED_DRIVER = "SSD1306"   # "SH1106" or "SSD1306" - this unit is SSD1306-compatible
 MLX_ADDR = 0x5A       # MLX90614 IR temperature sensor
 
 ADC_OUT_CURRENT = 0   # GP26 / ADC0 - ACS712 #1, 230 V side output current
