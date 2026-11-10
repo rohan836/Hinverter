@@ -40,9 +40,14 @@ class FakeOled:
 
 
 def make_ui():
-    s = settings_module.Settings.__new__(settings_module.Settings)
-    s.data = dict(settings_module._DEFAULTS)   # avoid touching flash/file
-    s.path = "settings.json"
+    import tempfile
+    # Point the settings store at a throwaway temp file so test saves can
+    # never dirty the committed settings.json defaults.
+    tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json",
+                                      delete=False)
+    tmp.close()
+    s = settings_module.Settings(path=tmp.name)
+    s.load()
     oled = FakeOled()
     ui = UI(oled, s)
     ui.vout = 230
