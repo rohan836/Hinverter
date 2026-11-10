@@ -68,9 +68,9 @@ Pico (RP2040)  ──SPWM+dead-time──▶  PC123 optocouplers ──▶  BD13
 | ADC0 — ACS712 #1 (output current) | GP26 | bidirectional, mains-capable |
 | ADC1 — ACS712 #2 (battery current) | GP27 | DC |
 | ADC2 — battery voltage divider | GP28 | 33k/10k → gain 4.3 |
-| Encoder CLK (A) | GP14 | IRQ falling edge |
-| Encoder DT (B) | GP15 | |
-| Encoder SW | GP16 | active-low, pull-up |
+| Encoder CLK (A) | GP16 | IRQ falling edge |
+| Encoder DT (B) | GP17 | |
+| Encoder SW | GP18 | active-low, pull-up |
 | Gate Q1 high-left → PC123 #1 | GP10 | consecutive for PIO |
 | Gate Q2 low-left → PC123 #2 | GP11 | |
 | Gate Q3 high-right → PC123 #3 | GP12 | |

@@ -11,9 +11,11 @@ ADC_OUT_CURRENT = 0   # GP26 / ADC0 - ACS712 #1, 230 V side output current
 ADC_BAT_CURRENT = 1   # GP27 / ADC1 - ACS712 #2, 12 V battery current
 ADC_BAT_VOLT = 2      # GP28 / ADC2 - battery voltage via 33k/10k divider
 
-ENC_CLK = 14
-ENC_DT = 15
-ENC_SW = 16
+# Encoder wired to GP16/17/18 to match the existing v3.0.0 board wiring
+# (GP16-18 are free GPIO; valid for the final build too).
+ENC_CLK = 16
+ENC_DT = 17
+ENC_SW = 18
 
 # Gate drive, consecutive GPIOs required by the PIO 'set' base pin.
 GATE_LEG_A = (10, 11)  # Q1 high-left,  Q2 low-left
