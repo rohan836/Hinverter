@@ -60,5 +60,9 @@ class Settings:
         return self.data.get(key, default)
 
     def set(self, key, value):
-        self.data = _validate({**self.data, key: value})
+        # MicroPython (3.4-ish syntax) does not accept {**d, k: v} displays;
+        # build the merged dict the classic way.
+        merged = dict(self.data)
+        merged[key] = value
+        self.data = _validate(merged)
         self.save()
