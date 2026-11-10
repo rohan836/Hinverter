@@ -28,8 +28,8 @@ SPWM_SM_B = 1
 CARRIER_HZ = 20_000          # 625 SM cycles @ 12.5 MHz (sys 125 MHz / 10)
 GATE_UPDATE_HZ = 5_000       # sine LUT duty refresh rate
 SINE_LUT_SIZE = 128
-DUTY_MAX = 576               # see spwm.py header for the cycle budget
-DEAD_CYCLES = 19             # ~1.52 us dead-time (SM clock 12.5 MHz)
+DUTY_MAX = 572               # see spwm.py header for the cycle budget
+DEAD_CYCLES = 21             # ~1.68 us dead-time (SM clock 12.5 MHz)
 FREE_HIGH = 0                # freewheel word: high MOSFET off ...
 FREE_LOW = DUTY_MAX          # ... low MOSFET conducts -> zero differential drive
 

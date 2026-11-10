@@ -22,9 +22,12 @@ tested, or mains-ready. Hardware commissioning order is in README.md.
 - **SPWM runs on PIO, not hardware PWM**: RP2040 PWM is edge-aligned and
   cannot insert dead-time between a leg's two MOSFETs — using it shoots
   through the battery. `spwm.py` budgets 625 SM cycles per 20 kHz carrier with
-  19-cycle (~1.5 µs) dead-time; X+Y = 576. If you edit the program, keep
-  high→dead-time→low→dead-time ordering.
-- **Freewheel = both low-side MOSFETs ON** (duty word 0/576 per leg), never
+  ~21-cycle (~1.7 µs) dead-time via counter loops (mov + jmp); X+Y = 572.
+  The PIO program is at the 32-instruction limit's edge — an earlier NOP-padded
+  draft exceeded it. Keep dead-time ordered high→dead-time→low→dead-time and
+  keep the program ≤32 instructions. Instantiating `SPWMBridge()` on-device is
+  part of the smoke test — never assume module import is enough.
+- **Freewheel = both low-side MOSFETs ON** (duty word 0/572 per leg), never
   all-gates-off: transformer primary needs a defined circulating path.
   Hard faults call `SPWMBridge.fault_stop()`; pins only go LOW at boot/reset
   or the watchdog.

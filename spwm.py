@@ -16,14 +16,21 @@ Cycle budget (SM clock = 125 MHz / 10 = 12.5 MHz, 625 cycles = 50 us = 20 kHz)
     set pins, 0b01    1   high gate ON
     hoff: jmp x--     X+1 cycles (both MOSFETs OFF after this)
     set pins, 0b00    1   clamp both OFF
-    19 x nop          19  dead-time (~1.52 us)
+    mov x, 19         1
+    d1: jmp x--       20  dead-time (~1.6 us)
     set pins, 0b10    1   low gate ON
     loff: jmp y--     Y+1 cycles
     set pins, 0b00    1   clamp both OFF
-    19 x nop          19  dead-time before next high side
+    mov x, 19         1
+    d2: jmp x--       20  dead-time (~1.6 us) before next high side
     jmp start         1   loop
     --------------------------------
-    X + Y = 576 = DUTY_MAX   (576 + 49 = 625 cycles)
+    X + Y = 572 = DUTY_MAX   (572 + 53 = 625 cycles)
+
+NOTE: the program keeps well under the PIO's 32-instruction limit - an
+earlier draft used 38 NOP instructions for dead-time and silently exceeded
+it. Dead-time is now generated with counter loops (mov + jmp), ~21 cycles
+(~1.68 us) each, comfortably above the ~1.5 us requirement.
 
 One state machine runs per leg (A and B). MicroPython pushes the duty pair at
 GATE_UPDATE_HZ (5 kHz); because `pull noblock` leaves the OSR untouched when
@@ -43,9 +50,9 @@ from machine import Pin
 import config
 from inv_math import clamp, make_sine_lut
 
-_DUTY_MAX = const(576)
+_DUTY_MAX = const(572)
 _FREE_HIGH = const(0)
-_FREE_LOW = const(576)
+_FREE_LOW = const(572)
 
 
 @rp2.asm_pio(set_init=(rp2.PIO.OUT_LOW, rp2.PIO.OUT_LOW))
@@ -61,48 +68,16 @@ def _leg_pwm():
     label("hoff")
     jmp(x_dec, "hoff")
     set(pins, 0b00)        # high OFF, both OFF
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()                  # 19 x ~80 ns = ~1.52 us dead-time
+    mov(x, 19)             # dead-time counter
+    label("d1")
+    jmp(x_dec, "d1")
     set(pins, 0b10)        # low ON
     label("loff")
     jmp(y_dec, "loff")
     set(pins, 0b00)        # low OFF, both OFF
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()
-    nop()                  # dead-time before the next high-side pulse
+    mov(x, 19)             # dead-time counter
+    label("d2")
+    jmp(x_dec, "d2")
     jmp("start")
 
 
@@ -110,7 +85,7 @@ class SPWMBridge:
     """Drives both H-bridge legs and the fixed sine reference."""
 
     def __init__(self):
-        self._lut = make_sine_lut(config.SINE_LUT_SIZE, DUTY_MAX // 2)
+        self._lut = make_sine_lut(config.SINE_LUT_SIZE, _DUTY_MAX // 2)
         self._phase = 0.0
         # duty duty of the modulation ramp (soft-start/soft-stop)
         self._m = 0.0
