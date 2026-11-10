@@ -71,8 +71,69 @@ class SH1106:
     def hline(self, x, y, w, on=1):
         self.fb.hline(x, y, w, on)
 
+    def vline(self, x, y, h, on=1):
+        self.fb.vline(x, y, h, on)
+
+    def pixel(self, x, y, on=1):
+        self.fb.pixel(x, y, on)
+
     def rect(self, x, y, w, h, on=1, fill=False):
         self.fb.rect(x, y, w, h, on, fill)
+
+    def rounded_rect(self, x, y, w, h, on=1):
+        """1-px rounded-ish outline: plain rect with the 4 corner pixels off."""
+        self.rect(x, y, w, h, on)
+        self.pixel(x, y, 0)
+        self.pixel(x + w - 1, y, 0)
+        self.pixel(x, y + h - 1, 0)
+        self.pixel(x + w - 1, y + h - 1, 0)
+
+    def text_center(self, s, y, on=1):
+        """Center an 8x8-font string horizontally (x guess from len)."""
+        w = len(s) * 8
+        x = max(2, (_COLS - w) // 2)
+        self.fb.text(s, x, y, on)
+        return x
+
+    def text_inverse(self, s, x, y, width, on=1):
+        """Black text on a solid white bar (our stand-in for color accents)."""
+        self.rect(x, y - 1, width, 10, 1, True)
+        self.fb.text(s, x + 2, y, 0)
+
+    def icon(self, bitmap, x, y, scale=1, on=1):
+        """Draw a 1-bit icon given as a list of strings of '#' and '.'."""
+        for row, bits in enumerate(bitmap):
+            for col, ch in enumerate(bits):
+                if ch != '#':
+                    continue
+                if scale == 1:
+                    self.fb.pixel(x + col, y + row, on)
+                else:
+                    self.fb.rect(x + col * scale, y + row * scale,
+                                 scale, scale, on, True)
+
+    def battery_icon(self, x, y, level_pct, on=1):
+        """Small horizontal battery: outline + tip + 0..4 fill bars."""
+        w, h = 16, 8
+        self.rect(x, y, w, h, on)          # body
+        self.vline(x + w, y + 2, h - 4)    # tip
+        bars = 0
+        pct = max(0, min(100, int(level_pct)))
+        if pct > 5:
+            bars = (pct * 4 + 99) // 100   # 1..4
+        for i in range(bars):
+            self.rect(x + 2 + i * 3, y + 2, 2, h - 4, on, True)
+
+    def curve_sin(self, x0, x1, y_mid, amplitude, on=1):
+        """Plot one full sine period between x0..x1 centered at y_mid."""
+        import math
+        prev = None
+        for x in range(x0, x1 + 1):
+            t = (x - x0) / max(1, x1 - x0) * 2.0 * math.pi
+            y = int(y_mid - amplitude * math.sin(t))
+            if prev is not None:
+                self.line(prev[0], prev[1], x, y, on)
+            prev = (x, y)
 
     def show(self):
         for page in range(_PAGES):

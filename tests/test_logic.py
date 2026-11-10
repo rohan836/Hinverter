@@ -57,6 +57,16 @@ def test_rms():
     print("rms ok")
 
 
+def test_batt_pct():
+    assert inv_math.batt_pct(12.75) == 100
+    assert inv_math.batt_pct(11.5) == 0
+    mid = inv_math.batt_pct(12.125)
+    assert 45 <= mid <= 55
+    assert inv_math.batt_pct(9.0) == 0    # clamped
+    assert inv_math.batt_pct(15.0) == 100
+    print("batt pct ok")
+
+
 def test_settings_validate():
     d = settings_module._validate({"vout": 999, "freq": 55, "icurrent_limit": 99.0})
     assert d["vout"] == 240          # clamped
@@ -72,5 +82,6 @@ if __name__ == "__main__":
     test_split_duties()
     test_duty_from_volts()
     test_rms()
+    test_batt_pct()
     test_settings_validate()
     print("ALL LOGIC TESTS PASSED")

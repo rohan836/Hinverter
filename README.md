@@ -28,8 +28,9 @@ Pico (RP2040)  ──SPWM+dead-time──▶  PC123 optocouplers ──▶  BD13
   state machine with hardware-enforced 1.5 µs dead-time** between the
   high-side and low-side MOSFETs of each H-bridge leg (no hardware-PWM
   "complementary output" shoot-through).
-- **1.3" SH1106 128×64 OLED** (I2C): home status screen, settings screen,
-  fault screen.
+- **1.3" SH1106 128×64 OLED** (I2C): Bruce-firmware-style UI — bordered screens,
+  status bar with battery icon, launcher home pages (Inverter / Battery /
+  Thermal), inverted selected rows, blinking fault latch screen, boot splash.
 - **Encoder UI** (HW-040): rotate = scroll/select, short press = select/edit,
   long press (≥1.5 s) = RUN/STOP toggle / exit-edit.
 - **Feedback + protection**, latched until acknowledge:
@@ -124,24 +125,36 @@ The four gate pins are consumed by the PIO via `set_base`; do not reassign GP10�
 
 ## Operation
 
-### Home screen
+The UI is a **Bruce-firmware-style** design adapted to a monochrome 128×64
+SH1106: 1-px rounded-rectangle border on every screen, a top status bar
+(`HINV` left, battery icon + volts right), black background with inverted
+(white-bar/black-text) accents standing in for Bruce's RGB565 colors.
+Monochrome OLED has no color/grayscale, so "accents" are inverted pixels.
+
+At boot a splash is shown (logo + sine plot, ~1.2 s).
+
+### Home pages (Bruce launcher model)
+Rotate switches pages; short press → Settings; long press (≥1.5 s) → RUN/STOP.
+
+**Inverter page** — big pixel bolt icon, `<` `>` chevrons, RUN shown as a
+full-width inverted bar (STOP = plain text), caption shows output setting:
 ```
-Hinverter    50Hz
-────────────────
-Out:230V  D:100%
-State: STOP        ← RUN / STOP / FAULT
-Iout: 0.0A
-Bat:12.6V +0.0A
-Sink: 33.5C
+ HINV          12.6V [||--]
+ ────────────────────────
+ <   ⚡⚡      >
+     STOP      ← or inverted RUN bar
+  Out:230V D:100%
 ```
 
-- **Short press** on home → Settings screen.
-- **Long press (≥1.5 s)** on home → toggle RUN / STOP.
-- **On a fault:** screen latches `FAULT: <reason>`; press once to acknowledge
-  (output stays OFF), then long-press again to run.
+**Battery page** — battery icon whose fill tracks an estimated rested
+lead-acid percentage (crude scale, not a fuel gauge), volts + amps.
 
-### Settings screen
-Rotate = select row, short press = edit row, long press = back to home.
+**Thermal page** — thermometer icon, heatsink temp, and a fill bar against
+the 70 °C (configurable) trip limit.
+
+### Settings screen (Bruce Config model)
+Centered option rows; the selected row is full-width inverted.
+Rotate = select, short press = edit, long press = back to home.
 Editing: rotate = adjust, short press = save, long press = cancel.
 
 | Setting | Range | Default | Notes |
@@ -213,7 +226,8 @@ AGENTS.md       guidance for AI coding agents working on this repo
 ## PC-side checks
 
 ```
-python tests/test_logic.py          # sine LUT, duty split, RMS, settings validation
+python tests/test_logic.py          # sine LUT, duty split, RMS, battery %, settings validation
+python tests/test_ui_render.py      # UI state machine smoke test via FakeOled (no hardware)
 python -m py_compile *.py           # byte-compile check of every module
 ```
 

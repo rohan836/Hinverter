@@ -48,6 +48,9 @@ def main():
 
     enc = Encoder()
     ui = UI(oled, settings)
+    ui.vbat = vbat_sense.volts()   # prime the battery readout for the splash
+    ui.splash()
+    time.sleep_ms(1200)
     led = Pin(config.LED_PIN, Pin.OUT, value=0)
 
     spwm_timer = Timer(-1)

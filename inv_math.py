@@ -47,6 +47,16 @@ def ema(state, sample, alpha):
     return state + (sample - state) * clamp(alpha, 0.0, 1.0)
 
 
+def batt_pct(vbat):
+    """Rough rested lead-acid state-of-charge estimate (11.5V..12.75V).
+
+    Used ONLY for the battery icon fill in the status bar / battery page.
+    It is a crude mapping, not a fuel gauge.
+    """
+    v = clamp(float(vbat), 11.5, 12.75)
+    return int(round((v - 11.5) / (12.75 - 11.5) * 100.0))
+
+
 def split_duties(fraction):
     """Split a 0..1 duty fraction for one H-bridge leg.
 

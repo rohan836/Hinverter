@@ -1,7 +1,1 @@
-{
-  "vout": 230,
-  "freq": 50,
-  "icurrent_limit": 8.0,
-  "overtemp_c": 70.0,
-  "lowbat_v": 10.8
-}
+{"vout": 230, "freq": 60, "icurrent_limit": 8.0, "overtemp_c": 70.0, "lowbat_v": 10.8}
