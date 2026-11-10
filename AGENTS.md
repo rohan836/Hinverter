@@ -57,6 +57,14 @@ tested, or mains-ready. Hardware commissioning order is in README.md.
   "SSD1306"`. `oled.py` supports both; column offset depends on driver
   (SSD1306 = 0, SH1106 = 2). Do not "fix" the init back to SH1106.
 
+- **Hard-IRQ handlers must NEVER let an exception escape.** A Ctrl-C that
+  landed in the 5 kHz SPWM timer IRQ printed a traceback and wedged the REPL
+  permanently (verified live). `_spwm_tick_safe` and `Encoder._edge` wrap all
+  IRQs in `try/except BaseException`; keep it that way. If mpremote cannot
+  connect, the board was wedged at a boot-crash or IRQ exception — replug USB
+  and retry; retrying costs nothing (RELP entry is atomic, file copies do not
+  send Ctrl-C again).
+
 ## Conventions
 - Flat module layout at repo root; files flash directly to the Pico.
 - Keep `inv_math.py` free of hardware imports (it is the PC-testable core);

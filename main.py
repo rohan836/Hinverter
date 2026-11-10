@@ -53,9 +53,18 @@ def main():
     time.sleep_ms(1200)
     led = Pin(config.LED_PIN, Pin.OUT, value=0)
 
+    def _spwm_tick_safe(_t):
+        # A timer hard-IRQ that lets an exception escape prints a traceback
+        # and wedges the REPL (verified live: Ctrl-C then never reaches the
+        # main loop again). Swallow everything - the watchdog is the backstop.
+        try:
+            bridge.tick()
+        except BaseException:
+            pass
+
     spwm_timer = Timer(-1)
     spwm_timer.init(freq=config.GATE_UPDATE_HZ, mode=Timer.PERIODIC,
-                    callback=lambda t: bridge.tick())
+                    callback=_spwm_tick_safe)
 
     wdt = WDT(timeout=config.WATCHDOG_MS)
 

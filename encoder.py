@@ -52,17 +52,21 @@ class Encoder:
     # ---- rotation (hard IRQ: integer math + one list lookup only) ----
 
     def _edge(self, pin):
-        new = (self._clk.value() << 1) | self._dt.value()
-        delta = _TABLE[(self._prev << 2) | new]
-        self._prev = new
-        if delta:
-            self._accr += delta
-            if self._accr >= 4:
-                self._accr -= 4
-                self._detents += 1
-            elif self._accr <= -4:
-                self._accr += 4
-                self._detents -= 1
+        # Hard IRQ must never let an exception escape (it wedges the REPL).
+        try:
+            new = (self._clk.value() << 1) | self._dt.value()
+            delta = _TABLE[(self._prev << 2) | new]
+            self._prev = new
+            if delta:
+                self._accr += delta
+                if self._accr >= 4:
+                    self._accr -= 4
+                    self._detents += 1
+                elif self._accr <= -4:
+                    self._accr += 4
+                    self._detents -= 1
+        except BaseException:
+            pass
 
     # ---- main-loop polling ----
 
