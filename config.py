@@ -3,7 +3,7 @@
 
 I2C_SDA = 4
 I2C_SCL = 5
-I2C_FREQ = 400_000
+I2C_FREQ = 100_000   # MLX90614 is SMBus (~max 100 kHz); faster froze the whole bus
 OLED_ADDR = 0x3C      # 1.3" 128x64 module (responds to SSD1306 commands)
 OLED_DRIVER = "SSD1306"   # "SH1106" or "SSD1306" - this unit is SSD1306-compatible
 MLX_ADDR = 0x5A       # MLX90614 IR temperature sensor
@@ -28,10 +28,10 @@ SPWM_SM_B = 1
 CARRIER_HZ = 20_000          # 625 SM cycles @ 12.5 MHz (sys 125 MHz / 10)
 GATE_UPDATE_HZ = 5_000       # sine LUT duty refresh rate
 SINE_LUT_SIZE = 128
-DUTY_MAX = 572               # see spwm.py header for the cycle budget
+DUTY_MAX = 570               # see spwm.py header for the cycle budget
 DEAD_CYCLES = 21             # ~1.68 us dead-time (SM clock 12.5 MHz)
-FREE_HIGH = 0                # freewheel word: high MOSFET off ...
-FREE_LOW = DUTY_MAX          # ... low MOSFET conducts -> zero differential drive
+# NOTE: no freewheel push words - SMs run at m=0 (50/50 duties) instead, so the
+# TX FIFO is never pre-filled and can never block the first tick().
 
 # ACS712-20A modules powered at 3.3 V (see README): sensitivity =
 # 0.1 V/A * (3.3 / 5) = 0.066 V/A. Counts per amp at 3.3 V full scale:

@@ -1,7 +1,7 @@
 """Hinverter — DIY 12V -> 230V SPWM full-bridge inverter firmware.
 
 Boot order matters: sensors are zero-calibrated and the H-bridge stays in
-freewheel before anything else touches the gates. The output NEVER starts on
+gates forced LOW before anything else is enabled. The output NEVER starts on
 its own; the operator must long-press the encoder to run.
 """
 

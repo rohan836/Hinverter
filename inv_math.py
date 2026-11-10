@@ -6,7 +6,7 @@ tested on a PC (see tests/test_logic.py) as well as on the Pico.
 
 import math
 
-DUTY_MAX = 572        # X+Y high-time budget per carrier period (see spwm.py)
+DUTY_MAX = 570        # X+Y high-time budget per carrier period (see spwm.py)
 DUTY_CENTER = DUTY_MAX // 2
 
 

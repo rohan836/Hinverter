@@ -22,18 +22,26 @@ tested, or mains-ready. Hardware commissioning order is in README.md.
 - **SPWM runs on PIO, not hardware PWM**: RP2040 PWM is edge-aligned and
   cannot insert dead-time between a leg's two MOSFETs — using it shoots
   through the battery. `spwm.py` budgets 625 SM cycles per 20 kHz carrier with
-  ~21-cycle (~1.7 µs) dead-time via counter loops (mov + jmp); X+Y = 572.
+  ~21-cycle (~1.7 µs) dead-time via counter loops (mov + jmp); X+Y = 570.
   The PIO program is at the 32-instruction limit's edge — an earlier NOP-padded
-  draft exceeded it. Keep dead-time ordered high→dead-time→low→dead-time and
+  draft exceeded it. Keep dead-time ordered high→dead-time→low→dead-time.
+- **NEVER put `push` in the SPWM PIO program**: verified on-device that
+  `push(noblock)` stalls the SM when the RX FIFO is full, which wedges the TX
+  path (duty words never consumed, `sm.put()` blocks forever, bridge hangs).
+  The cycle must have no pushes; Python never pulls RX state back.
   keep the program ≤32 instructions. Instantiating `SPWMBridge()` on-device is
   part of the smoke test — never assume module import is enough.
-- **Freewheel = both low-side MOSFETs ON** (duty word 0/572 per leg), never
-  all-gates-off: transformer primary needs a defined circulating path.
-  Hard faults call `SPWMBridge.fault_stop()`; pins only go LOW at boot/reset
-  or the watchdog.
-- **`pull noblock` keeps stale OSR**: duties are pushed at 5 kHz while the
-  20 kHz carrier free-runs; Python must not push per carrier cycle.
-- **I2C at 400 kHz is shared**: OLED @ 0x3C + MLX90614 @ 0x5A (I2C0,
+- **Safe state = all gates LOW, SMs halted.** Normal STOP ramps modulation to
+  zero (50/50 duties) and then forces gates LOW; faults call
+  `SPWMBridge.fault_stop()` immediately. There is no "freewheel push" — the TX
+  FIFO is never pre-filled, because a full 4-word FIFO blocks the first
+  `tick()` forever and wedged the bridge. Never re-add freewheel pushes.
+- **Duty feed is `pull(ifempty, noblock)` + `out(null, 32)` re-arm**: the
+  `out` re-opens the ifempty gate each cycle, so the SM pulls a duty pair
+  whenever Python has pushed one and otherwise free-runs the stale pair. Plain
+  `pull(noblock)` pulls NOTHING on this MicroPython build (verified
+  on-device) — do not "simplify" back to it. Python pushes at 5 kHz only.
+- **I2C at 100 kHz is shared**: OLED @ 0x3C + MLX90614 @ 0x5A (I2C0,
   GP4/GP5). Never do I2C inside the SPWM timer IRQ — `spwm.tick()` is
   integer/float math + MMIO only.
 - **ACS712 at 5 V saturates the 3.3 V ADC** above ~8 A — keep both modules

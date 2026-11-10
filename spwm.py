@@ -9,28 +9,33 @@ never on together.
 
 Cycle budget (SM clock = 125 MHz / 10 = 12.5 MHz, 625 cycles = 50 us = 20 kHz)
 
-    pull noblock      1   (duty_high, or stale OSR if FIFO empty)
-    mov x, osr        1
-    pull noblock      1   (duty_low,  or stale OSR)
-    mov y, osr        1
-    set pins, 0b01    1   high gate ON
-    hoff: jmp x--     X+1 cycles (both MOSFETs OFF after this)
-    set pins, 0b00    1   clamp both OFF
-    mov x, 19         1
-    d1: jmp x--       20  dead-time (~1.6 us)
-    set pins, 0b10    1   low gate ON
-    loff: jmp y--     Y+1 cycles
-    set pins, 0b00    1   clamp both OFF
-    mov x, 19         1
-    d2: jmp x--       20  dead-time (~1.6 us) before next high side
-    jmp start         1   loop
+    pull ifempty,noblock  1   (or stale value if FIFO is empty)
+    mov x, osr            1
+    out null, 32          1   re-arms the ifempty gate (OSR "empty" again)
+    pull ifempty,noblock  1   (duty_low; stale OSR if empty)
+    mov y, osr            1
+    out null, 32          1   re-arms gate for next iteration
+    set pins, 0b01        1   high gate ON
+    hoff: jmp x--         X+1 cycles (both MOSFETs OFF after this)
+    set pins, 0b00        1   clamp both OFF
+    mov x, 19             1
+    d1: jmp x--           20  dead-time (~1.6 us)
+    set pins, 0b10        1   low gate ON
+    loff: jmp y--         Y+1 cycles
+    set pins, 0b00        1   clamp both OFF
+    mov x, 19             1
+    d2: jmp x--           20  dead-time (~1.6 us) before next high side
+    jmp start             1   loop
     --------------------------------
-    X + Y = 572 = DUTY_MAX   (572 + 53 = 625 cycles)
+    X + Y = 570 = DUTY_MAX   (570 + 55 = 625 cycles)
 
-NOTE: the program keeps well under the PIO's 32-instruction limit - an
-earlier draft used 38 NOP instructions for dead-time and silently exceeded
-it. Dead-time is now generated with counter loops (mov + jmp), ~21 cycles
-(~1.68 us) each, comfortably above the ~1.5 us requirement.
+IMPORTANT (verified on-device): this program must contain NO push
+instructions. `push(noblock)` STALLS the SM when the RX FIFO is full; the
+earlier version pushed every cycle, filled the RX FIFO within microseconds,
+never consumed TX duty words again, and `sm.put()` blocked forever - hanging
+the bridge and every smoke test that called tick() twice. The gate sequence
+starts with all MOSFETs off and never holds an output on, so an empty FIFO
+safely holds the last duty pair instead of wedging.
 
 One state machine runs per leg (A and B). MicroPython pushes the duty pair at
 GATE_UPDATE_HZ (5 kHz); because `pull noblock` leaves the OSR untouched when
@@ -38,9 +43,9 @@ the FIFO is empty, the PIO reuses the last pushed pair for every carrier
 cycle in between — so the 20 kHz carrier runs autonomously and Python never
 has to hit the FIFO faster than 5 kHz.
 
-Freewheel words (FREE_HIGH, FREE_LOW) hold both legs with the low-side MOSFETs
-conducting, so the transformer primary sees zero differential drive and both
-IRF540 anti-parallel diodes can circulate current.
+Safe state everywhere: gates boot LOW, fault forces both SMs off and all
+gates LOW, and normal STOP ramps modulation to zero then forces all gates
+LOW. No state ever leaves one MOSFET on.
 """
 
 import rp2
@@ -50,9 +55,7 @@ from machine import Pin
 import config
 from inv_math import clamp, make_sine_lut
 
-_DUTY_MAX = const(572)
-_FREE_HIGH = const(0)
-_FREE_LOW = const(572)
+_DUTY_MAX = const(570)   # X+Y budget per carrier period; see header comment
 
 
 @rp2.asm_pio(set_init=(rp2.PIO.OUT_LOW, rp2.PIO.OUT_LOW))
@@ -60,10 +63,12 @@ def _leg_pwm():
     # Runs once at SM start: make both gate pins outputs.
     set(pindirs, 0b11)
     label("start")
-    pull(noblock)          # duty_high -> stale OSR kept if no new word
+    pull(ifempty, noblock) # duty_high (stale OSR if FIFO is empty)
     mov(x, osr)
-    pull(noblock)          # duty_low
+    out(null, 32)          # re-arm the ifempty gate for the next pull
+    pull(ifempty, noblock) # duty_low (stale OSR if FIFO is empty)
     mov(y, osr)
+    out(null, 32)          # re-arm the gate for the next iteration
     set(pins, 0b01)        # high ON
     label("hoff")
     jmp(x_dec, "hoff")
@@ -110,33 +115,32 @@ class SPWMBridge:
     # ---- lifecycle -------------------------------------------------------
 
     def start(self):
-        """Enable the gate outputs and ramp modulation up smoothly."""
+        """Enable the gate outputs and ramp modulation up smoothly.
+
+        No FIFO pre-fill: gates boot LOW and tick() starts at m = 0 (50/50
+        duties), so nothing is pushed until the first tick - pushing here
+        would fill the 4-word TX FIFO and block the first tick() forever.
+        """
         self._sm_a.active(1)
         self._sm_b.active(1)
         self._phase = 0.0
         self._m = 0.0
         self._target_m = 1.0  # scaled by vout setting in tick()
-        self.freewheel()
         self.enabled = True
 
     def stop(self):
-        """Ramp modulation to zero, then hold freewheel (differential = 0)."""
+        """Ramp modulation to zero, then disable the bridge and force all
+        gates LOW (open circuit across the transformer)."""
         self._target_m = 0.0
         # tick() finishes the stop once the ramp reaches zero.
 
     def fault_stop(self):
-        """Immediate freewheel + latch-off. Gates never go high again
-        until SPWMBridge.start() is called deliberately."""
+        """Immediate latch-off: SMs halted, all gate pins driven LOW.
+        Gates never go high again until start() is called deliberately."""
         self.enabled = False
         self._target_m = 0.0
         self._m = 0.0
-        self.freewheel()
-
-    def freewheel(self):
-        """Push the freewheel duty pair (differential drive = 0)."""
-        for sm in (self._sm_a, self._sm_b):
-            sm.put(_FREE_HIGH)
-            sm.put(_FREE_LOW)
+        self.all_low()
 
     # ---- modulation ------------------------------------------------------
 
@@ -166,7 +170,7 @@ class SPWMBridge:
             else:
                 self._m = 0.0
                 self.enabled = False
-                self.freewheel()
+                self.all_low()          # gates forced LOW, SMs halted
                 return
         elif self._m < target:
             self._m = min(target, self._m + 0.02)

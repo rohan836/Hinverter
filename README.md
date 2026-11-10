@@ -178,9 +178,8 @@ Persisted to `settings.json`; invalid/corrupt files fall back to safe defaults.
 | `OVERTEMP` | MLX90614 object temp > OverTemp C |
 | `LOW BATTERY` | battery voltage (divider) < LowBat V |
 
-Freewheel state on trip = both legs' low-side MOSFETs conduct → zero
-differential drive across the transformer → output energy collapses safely via
-the IRF540 body diodes.
+Fault state = all gate pins LOW (SMs halted): no MOSFET conducting,
+transformer primary open-circuit — the safest latch for this bridge.
 
 ## Calibration
 
@@ -213,7 +212,7 @@ the IRF540 body diodes.
 main.py         boot + main loop (watchdog, sweep, SPWM timer, UI dispatch)
 config.py       pin map, carrier/LUT constants, divider & ACS712 scaling
 inv_math.py     pure math (sine LUT, duty split, RMS, clamp) - PC-testable
-spwm.py         PIO program: SPWM + dead-time, bridge driver, freewheel
+spwm.py         PIO program: SPWM + dead-time, bridge driver (no pushes)
 sensors.py      ACS712 / MLX90614 / battery divider drivers
 protect.py      protection logic, fault latch
 screens.py      screens + encoder UI state machine

@@ -1,6 +1,6 @@
 """Protection: over-current, over-temperature, low-battery.
 
-All faults LATCH: the inverter output is forced to freewheel and stays off
+All faults LATCH: the inverter output is forced off (all gates LOW) and stays off
 until the operator acknowledges with a short encoder press. There is no
 auto-retry, by design.
 """
